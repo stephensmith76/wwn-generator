@@ -6,6 +6,7 @@ import CopyButton from "./CopyButton";
 type NameEntry = {
   id: string;
   name: string;
+  phonetic: string;
   meaning: string;
   category: string;
   pinned: boolean;
@@ -33,6 +34,54 @@ function syllable(allowEmpty = false): string {
 
 function cap(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+const LIVONIAN_VOWELS = new Set([...'aāeēiīoōuūõ']);
+
+const PHONETIC_SUBS: [RegExp, string][] = [
+  [/ā/g, 'ah'], [/ē/g, 'ay'], [/ī/g, 'ee'],
+  [/ō/g, 'oh'], [/ū/g, 'oo'], [/õ/g, 'uh'],
+  [/š/g, 'sh'], [/ž/g, 'zh'], [/ļ/g, 'ly'], [/ņ/g, 'ny'], [/ƕ/g, 'wh'],
+];
+
+function substitute(s: string): string {
+  for (const [re, rep] of PHONETIC_SUBS) s = s.replace(re, rep);
+  return s;
+}
+
+function toPhonetic(name: string): string {
+  const lower = name.toLowerCase();
+
+  // Collect vowel positions (each diacritic char is one Unicode char)
+  const vowelPos: number[] = [];
+  for (let i = 0; i < lower.length; i++) {
+    if (LIVONIAN_VOWELS.has(lower[i])) vowelPos.push(i);
+  }
+  if (vowelPos.length === 0) return name.toUpperCase();
+
+  // Build syllable cut points
+  const cuts: number[] = [0];
+  for (let v = 1; v < vowelPos.length; v++) {
+    const prev = vowelPos[v - 1];
+    const curr = vowelPos[v];
+    const between = lower.slice(prev + 1, curr); // consonants between vowels
+    if (between.length === 0) {
+      cuts.push(curr);           // adjacent vowels: split them
+    } else {
+      cuts.push(curr - 1);       // consonant(s): last one becomes onset of next syllable
+    }
+  }
+  cuts.push(lower.length);
+
+  // Build syllables with substitutions applied
+  const syllables: string[] = [];
+  for (let i = 0; i < cuts.length - 1; i++) {
+    syllables.push(substitute(lower.slice(cuts[i], cuts[i + 1])));
+  }
+
+  // Stress on first syllable
+  syllables[0] = syllables[0].toUpperCase();
+  return syllables.join('-');
 }
 
 function pick<T>(arr: T[]): T {
@@ -71,9 +120,11 @@ function makeName(cat: string): string {
 }
 
 function makeEntry(cat: string): NameEntry {
+  const name = makeName(cat);
   return {
     id: Math.random().toString(36).slice(2),
-    name: makeName(cat),
+    name,
+    phonetic: toPhonetic(name),
     meaning: pick(nameData.meanings[cat]),
     category: cat,
     pinned: false,
@@ -81,7 +132,45 @@ function makeEntry(cat: string): NameEntry {
 }
 
 function allNamesToText(entries: NameEntry[]): string {
-  return entries.map(e => `${e.name} (${e.category}) — ${e.meaning}`).join("\n");
+  return entries.map(e => `${e.name}  [${e.phonetic}]  — ${e.meaning}`).join("\n");
+}
+
+const pronunciationGuide = [
+  { chars: "ā  ē  ī  ō  ū", hint: "Long vowels — hold each about twice as long as the plain version. ā like \"father\", ē like \"they\", ī like \"see\", ō like \"go\", ū like \"moon\"." },
+  { chars: "õ", hint: "Livonian's most distinctive sound. Somewhere between \"uh\" and \"oh\" with unrounded lips — like the vowel in \"her\" without the R, or Estonian õ. Aim for the back of the mouth, relaxed." },
+  { chars: "š", hint: "Like English \"sh\" — shore, shadow, ship." },
+  { chars: "ž", hint: "Like the \"s\" in \"measure\" or \"treasure\", or French \"j\" in \"bonjour\"." },
+  { chars: "ļ", hint: "Soft (palatalized) L — blend \"l\" and \"y\" together quickly, like the \"ll\" in Italian \"meglio\" or \"ly\" in \"million\"." },
+  { chars: "ņ", hint: "Soft (palatalized) N — like \"ny\" said as one sound: Spanish ñ, or the \"ni\" in \"onion\", or French \"gn\" in \"montagne\"." },
+  { chars: "ƕ", hint: "A breathy W — like the \"wh\" in \"where\" or \"whale\" in accents that distinguish it from plain W." },
+];
+
+function PronunciationGuide() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="border-t border-stone-800 pt-3">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="text-stone-500 hover:text-stone-300 text-xs flex items-center gap-1 transition-colors"
+      >
+        <span>{open ? "▲" : "▼"}</span>
+        Pronunciation guide
+      </button>
+      {open && (
+        <div className="mt-3 space-y-3">
+          {pronunciationGuide.map((row) => (
+            <div key={row.chars} className="flex gap-3">
+              <span className="text-amber-400 font-mono text-sm shrink-0 min-w-[4rem]">{row.chars}</span>
+              <span className="text-stone-400 text-xs leading-relaxed">{row.hint}</span>
+            </div>
+          ))}
+          <p className="text-stone-600 text-xs pt-1">
+            Unmarked vowels (a e i o u) and consonants are roughly as in English or Italian. Stress generally falls on the first syllable.
+          </p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 type Props = { onAdd: (label: string, text: string) => void };
@@ -101,7 +190,7 @@ export default function NameGenerator({ onAdd }: Props) {
       if (result.length > 0) {
         onAdd(
           `Names (${cat})`,
-          result.map((e) => `${e.name} — ${e.meaning}`).join("\n")
+          result.map((e) => `${e.name}  [${e.phonetic}]  — ${e.meaning}`).join("\n")
         );
       }
     },
@@ -114,7 +203,7 @@ export default function NameGenerator({ onAdd }: Props) {
     const n = Math.max(count, 1);
     const fresh = Array.from({ length: n }, () => makeEntry(cat));
     setNames(fresh);
-    onAdd(`Names (${cat})`, fresh.map((e) => `${e.name} — ${e.meaning}`).join("\n"));
+    onAdd(`Names (${cat})`, fresh.map((e) => `${e.name}  [${e.phonetic}]  — ${e.meaning}`).join("\n"));
   }
 
   function togglePin(id: string) {
@@ -215,9 +304,10 @@ export default function NameGenerator({ onAdd }: Props) {
                   </button>
                 </div>
               </div>
-              <p className="text-stone-100 font-semibold text-lg leading-tight mb-1">
+              <p className="text-stone-100 font-semibold text-lg leading-tight">
                 {entry.name}
               </p>
+              <p className="text-stone-500 text-xs font-mono mb-1">{entry.phonetic}</p>
               <p className="text-stone-400 text-xs leading-snug">{entry.meaning}</p>
             </div>
           ))}
@@ -230,10 +320,7 @@ export default function NameGenerator({ onAdd }: Props) {
         </p>
       )}
 
-      <p className="text-stone-600 text-xs border-t border-stone-800 pt-3">
-        Names drawn from Livonian phonology: long vowels (ā ē ī ō ū), the characteristic õ,
-        palatalized consonants (ļ ņ), and soft sibilants (ž š).
-      </p>
+      <PronunciationGuide />
     </div>
   );
 }
