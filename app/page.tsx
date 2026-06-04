@@ -3,10 +3,11 @@ import { useState } from "react";
 import NPCGenerator from "@/components/NPCGenerator";
 import DungeonGenerator from "@/components/DungeonGenerator";
 import MonsterGenerator from "@/components/MonsterGenerator";
+import NameGenerator from "@/components/NameGenerator";
 import HistoryPanel from "@/components/HistoryPanel";
 import { useHistory } from "@/hooks/useHistory";
 
-type Tab = "npc" | "dungeon" | "monster" | "log";
+type Tab = "npc" | "dungeon" | "monster" | "names" | "log";
 
 export default function Home() {
   const [tab, setTab] = useState<Tab>("npc");
@@ -16,6 +17,7 @@ export default function Home() {
     { id: "npc", label: "NPC" },
     { id: "dungeon", label: "Dungeon" },
     { id: "monster", label: "Monster" },
+    { id: "names", label: "Names" },
     { id: "log", label: entries.length > 0 ? `Log (${entries.length})` : "Log" },
   ];
 
@@ -43,6 +45,7 @@ export default function Home() {
         {tab === "npc" && <NPCGenerator onAdd={add} />}
         {tab === "dungeon" && <DungeonGenerator onAdd={add} />}
         {tab === "monster" && <MonsterGenerator onAdd={add} />}
+        {tab === "names" && <NameGenerator onAdd={add} />}
         {tab === "log" && <HistoryPanel entries={entries} onClear={clear} />}
       </div>
     </div>
